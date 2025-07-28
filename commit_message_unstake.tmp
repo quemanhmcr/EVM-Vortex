@@ -1,0 +1,5 @@
+feat(contracts): implement unstake functionality
+
+- Implement the unstake() function in StakingManager.sol following the Checks-Effects-Interactions pattern.
+- Add and test for the 'Unstaked' event.
+- Add tests to ensure unstaking reverts correctly when the user has an insufficient balance.
