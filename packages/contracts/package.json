@@ -1,0 +1,26 @@
+{
+  "name": "@evm-vortex/contracts",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "coverage": "hardhat coverage",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^3.1.0",
+    "@nomicfoundation/hardhat-toolbox": "^6.1.0",
+    "@typechain/ethers-v6": "^0.5.1",
+    "@typechain/hardhat": "^9.1.0",
+    "eslint": "^9.32.0",
+    "ethers": "^6.15.0",
+    "hardhat": "^2.26.1",
+    "hardhat-gas-reporter": "^2.3.0",
+    "prettier": "^3.6.2",
+    "solidity-coverage": "^0.8.16",
+    "ts-node": "^10.9.2",
+    "typechain": "^8.3.2"
+  }
+}

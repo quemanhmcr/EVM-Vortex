@@ -1,7 +1,0 @@
-feat(core): initial project scaffolding
-
-Re-scaffold project with corrected structure.
-
-- Fixes issue where empty directories (services, apps, etc.) were not tracked by Git by adding .gitkeep files.
-- Standardizes contract path to 'packages/contracts/src' for consistency.
-- Establishes a clean, verifiable, and professional monorepo baseline.
