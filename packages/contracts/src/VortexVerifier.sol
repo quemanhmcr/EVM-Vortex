@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "./interfaces/IStakingManager.sol";
+import "./DisputeResolver.sol";
 
 /**
  * @title VortexVerifier
@@ -15,70 +16,46 @@ contract VortexVerifier {
     /// @notice The address of the StakingManager contract, used to verify proposer stakes.
     IStakingManager public immutable stakingManager;
 
+    /// @notice The address of the DisputeResolver contract, where challenges are sent.
+    DisputeResolver public immutable disputeResolver;
+
     /// @notice The duration in seconds for the challenge period.
     uint256 public immutable challengePeriod;
 
-    /**
-     * @notice Represents the data payload submitted by a Proposer.
-     * @param timestamp The timestamp associated with the data (e.g., from an off-chain source).
-     * @param data The arbitrary data bytes being proposed.
-     */
     struct DataPayload {
         uint256 timestamp;
         bytes data;
     }
 
-    /**
-     * @notice Contains all information about a proposed data payload.
-     * @param proposer The address of the account that proposed the data.
-     * @param proposedAt The block timestamp when the proposal was made.
-     * @param payload The actual data payload.
-     * @param isExecuted A flag indicating if the proposal's intent has been executed.
-     */
     struct Proposal {
         address proposer;
         uint256 proposedAt;
         DataPayload payload;
         bool isExecuted;
-        // bool isChallenged; // To be used in the unhappy path
+        bool isChallenged;
     }
 
-    /// @notice Mapping from a unique data ID to the corresponding proposal.
     mapping(bytes32 => Proposal) public proposedData;
 
-    /// @notice Emitted when a new data payload is proposed.
     event DataProposed(bytes32 indexed dataId, address indexed proposer, DataPayload payload);
-    
-    /// @notice Emitted when a data payload is executed after the challenge period.
     event DataExecuted(bytes32 indexed dataId);
+    event DataChallenged(bytes32 indexed dataId, address indexed challenger);
 
-    /**
-     * @dev A modifier to ensure the caller has a stake in the StakingManager.
-     */
     modifier onlyStaker() {
         require(stakingManager.stakes(msg.sender) > 0, "VortexVerifier: Caller is not a staker");
         _;
     }
 
-    /**
-     * @notice Initializes the contract with necessary addresses and parameters.
-     * @param _stakingManager The address of the deployed StakingManager contract.
-     * @param _challengePeriod The duration of the challenge period in seconds.
-     */
-    constructor(address _stakingManager, uint256 _challengePeriod) {
+    constructor(address _stakingManager, address _disputeResolver, uint256 _challengePeriod) {
         require(_stakingManager != address(0), "VortexVerifier: Invalid StakingManager address");
+        require(_disputeResolver != address(0), "VortexVerifier: Invalid DisputeResolver address");
         require(_challengePeriod > 0, "VortexVerifier: Challenge period must be greater than 0");
+        
         stakingManager = IStakingManager(_stakingManager);
+        disputeResolver = DisputeResolver(_disputeResolver);
         challengePeriod = _challengePeriod;
     }
 
-    /**
-     * @notice Called by a Proposer (a staker) to submit a new data payload.
-     * @dev The dataId is generated using keccak256 over the proposer, block timestamp, and payload.
-     * This is considered sufficiently unique for the happy path.
-     * @param _payload The data payload containing the timestamp and data bytes.
-     * @return dataId The unique identifier for the proposal.
-     */
     function proposeData(DataPayload calldata _payload) external onlyStaker returns (bytes32) {
         bytes32 dataId = keccak256(abi.encodePacked(msg.sender, block.timestamp, _payload.timestamp, _payload.data));
 
@@ -86,28 +63,42 @@ contract VortexVerifier {
             proposer: msg.sender,
             proposedAt: block.timestamp,
             payload: _payload,
-            isExecuted: false
+            isExecuted: false,
+            isChallenged: false
         });
 
         emit DataProposed(dataId, msg.sender, _payload);
         return dataId;
     }
 
-    /**
-     * @notice Executes a user's intent based on a proposed data payload, after the challenge period has passed.
-     * @param _dataId The unique ID of the data payload to execute.
-     */
     function executeIntent(bytes32 _dataId) external {
         Proposal storage proposal = proposedData[_dataId];
 
         require(proposal.proposer != address(0), "VortexVerifier: Proposal does not exist");
         require(!proposal.isExecuted, "VortexVerifier: Intent already executed");
-        // require(!proposal.isChallenged, "VortexVerifier: Proposal is under challenge");
-
+        require(!proposal.isChallenged, "VortexVerifier: Proposal is under challenge");
         require(block.timestamp >= proposal.proposedAt + challengePeriod, "VortexVerifier: Challenge period has not ended");
 
         proposal.isExecuted = true;
-
         emit DataExecuted(_dataId);
+    }
+
+    /**
+     * @notice Allows any user to challenge a proposed data payload within the challenge period.
+     * @dev This function marks the proposal as challenged, preventing its execution until the dispute is resolved.
+     * @param _dataId The unique ID of the data payload to challenge.
+     */
+    function challengeData(bytes32 _dataId) external {
+        Proposal storage proposal = proposedData[_dataId];
+
+        require(proposal.proposer != address(0), "VortexVerifier: Proposal does not exist");
+        require(block.timestamp < proposal.proposedAt + challengePeriod, "VortexVerifier: Challenge period has ended");
+        require(!proposal.isChallenged, "VortexVerifier: Proposal already challenged");
+
+        proposal.isChallenged = true;
+        emit DataChallenged(_dataId, msg.sender);
+
+        // Future step: Interact with DisputeResolver
+        // disputeResolver.initiateDispute(_dataId, msg.sender);
     }
 }
