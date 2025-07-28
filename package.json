@@ -1,6 +1,7 @@
 {
   "name": "evm-vortex",
   "version": "1.0.0",
+  "type": "module",
   "private": true,
   "description": "Decentralized EVM-Vortex Protocol v2.0 Monorepo",
   "scripts": {
@@ -11,6 +12,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
   },
   "devDependencies": {
+    "@eslint/js": "^9.32.0",
     "@typescript-eslint/eslint-plugin": "^8.38.0",
     "@typescript-eslint/parser": "^8.38.0",
     "eslint": "^9.32.0",
@@ -18,7 +20,8 @@
     "eslint-plugin-prettier": "^5.5.3",
     "prettier": "^3.6.2",
     "turbo": "^2.5.5",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.38.0"
   },
   "packageManager": "pnpm@10.13.1"
 }

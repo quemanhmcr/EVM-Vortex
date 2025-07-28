@@ -1,8 +1,0 @@
-chore(project): set up package configurations
-
-- Initialize package.json for all packages and services.
-- Configure Hardhat for the 'contracts' package.
-- Configure TypeScript for 'shared', 'witness-network', and 'zk-challenger' packages.
-- Establish workspace dependencies (e.g., services depending on shared).
-- Fix turbo.json configuration keys ('baseBranch', 'pipeline' -> 'tasks').
-- Add placeholder index.ts to 'shared' to ensure successful initial build.
