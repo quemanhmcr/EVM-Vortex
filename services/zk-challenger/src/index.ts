@@ -1,2 +1,2 @@
 // ZK Challenger Service Entry Point
-console.log('ZK Challenger starting...');
+console.log('ZK Challenger starting...')
