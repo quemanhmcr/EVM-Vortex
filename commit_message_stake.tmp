@@ -1,6 +1,0 @@
-feat(contracts): implement basic stake functionality
-
-- Implement the stake() function in StakingManager.sol.
-- Add a mapping to track user stakes.
-- Emit a 'Staked' event upon successful staking.
-- Develop tests for deployment, staking, and event emission using TDD methodology.
