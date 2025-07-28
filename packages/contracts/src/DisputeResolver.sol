@@ -7,5 +7,5 @@ pragma solidity ^0.8.20;
  * It is the ultimate source of truth in the case of a challenge.
  */
 contract DisputeResolver {
-    // Will be implemented
+    // Implementation will follow
 }

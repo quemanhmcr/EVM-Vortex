@@ -7,5 +7,5 @@ pragma solidity ^0.8.20;
  * in the Witness Network.
  */
 contract StakingManager {
-    // Will be implemented
+    // Implementation will follow
 }

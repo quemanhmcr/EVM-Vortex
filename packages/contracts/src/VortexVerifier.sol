@@ -7,5 +7,5 @@ pragma solidity ^0.8.20;
  * It manages a challenge period during which the data can be disputed.
  */
 contract VortexVerifier {
-    // Will be implemented
+    // Implementation will follow
 }
