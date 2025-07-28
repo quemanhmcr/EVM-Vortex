@@ -1,5 +1,0 @@
-fix(lint): allow unused expressions in test files
-
-This commit updates the ESLint configuration to disable the '@typescript-eslint/no-unused-expressions' rule specifically for test files (*.test.ts).
-
-This is necessary because the Chai assertion library's 'expect' syntax is often flagged as an unused expression by the linter, which caused the CI to fail.
