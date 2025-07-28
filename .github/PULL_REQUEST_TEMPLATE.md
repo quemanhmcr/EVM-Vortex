@@ -5,11 +5,11 @@ about: 'Propose a new feature or enhancement.'
 
 ## Description
 
-*A clear and concise description of what this Pull Request does.*
+_A clear and concise description of what this Pull Request does._
 
 ## Related Issue
 
-*Closes #issue_number*
+_Closes #issue_number_
 
 ## Type of Change
 
@@ -21,7 +21,7 @@ about: 'Propose a new feature or enhancement.'
 
 ## How Has This Been Tested?
 
-*Please describe the tests that you ran to verify your changes. Provide instructions so we can reproduce.*
+_Please describe the tests that you ran to verify your changes. Provide instructions so we can reproduce._
 
 - [ ] Test A
 - [ ] Test B

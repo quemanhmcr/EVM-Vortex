@@ -26,6 +26,7 @@ This monorepo is managed by **pnpm** and **Turborepo**.
 ### Getting Started
 
 1.  **Install dependencies:**
+
     ```bash
     pnpm install
     ```
@@ -42,4 +43,5 @@ This monorepo is managed by **pnpm** and **Turborepo**.
 - `pnpm --filter <package-name> <command>`: Run a command within a specific package (e.g., `pnpm --filter contracts test`).
 
 ---
-*This project adheres to the highest standards of software engineering, including automated CI/CD, comprehensive testing, and detailed documentation.*
+
+_This project adheres to the highest standards of software engineering, including automated CI/CD, comprehensive testing, and detailed documentation._

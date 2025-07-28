@@ -1,7 +1,7 @@
-import { HardhatUserConfig } from 'hardhat/config';
-import '@nomicfoundation/hardhat-toolbox';
-import 'solidity-coverage';
-import 'hardhat-gas-reporter';
+import { HardhatUserConfig } from 'hardhat/config'
+import '@nomicfoundation/hardhat-toolbox'
+import 'solidity-coverage'
+import 'hardhat-gas-reporter'
 
 const config: HardhatUserConfig = {
   solidity: {
@@ -27,6 +27,6 @@ const config: HardhatUserConfig = {
     outDir: 'typechain-types',
     target: 'ethers-v6',
   },
-};
+}
 
-export default config;
+export default config
