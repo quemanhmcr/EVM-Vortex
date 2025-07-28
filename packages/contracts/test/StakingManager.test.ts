@@ -1,63 +1,88 @@
+import {
+  loadFixture,
+} from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 
 describe("StakingManager", function () {
-  it("Should deploy successfully", async function () {
+  // We define a fixture to reuse the same setup in every test.
+  // We use loadFixture to run this setup once, snapshot that state,
+  // and reset Hardhat Network to that snapshot in every test.
+  async function deployStakingManagerFixture() {
+    const [owner, otherAccount] = await ethers.getSigners();
+
     const StakingManagerFactory = await ethers.getContractFactory("StakingManager");
     const stakingManager = await StakingManagerFactory.deploy();
     await stakingManager.waitForDeployment();
 
-    expect(await stakingManager.getAddress()).to.not.be.null;
+    return { stakingManager, owner, otherAccount };
+  }
+
+  describe("Deployment", function () {
+    it("Should deploy successfully", async function () {
+      const { stakingManager } = await loadFixture(deployStakingManagerFixture);
+      expect(await stakingManager.getAddress()).to.not.be.null;
+    });
   });
 
-  it("Should allow a user to stake and update their balance", async function () {
-    const StakingManagerFactory = await ethers.getContractFactory("StakingManager");
-    const stakingManager = await StakingManagerFactory.deploy();
-    await stakingManager.waitForDeployment();
+  describe("Staking", function () {
+    it("Should allow a user to stake and update their balance", async function () {
+      const { stakingManager, owner } = await loadFixture(deployStakingManagerFixture);
+      const stakeAmount = ethers.parseEther("1.0");
 
-    const [owner] = await ethers.getSigners();
-    const stakeAmount = ethers.parseEther("1.0");
+      await expect(stakingManager.connect(owner).stake({ value: stakeAmount }))
+        .to.emit(stakingManager, "Staked")
+        .withArgs(owner.address, stakeAmount);
 
-    await expect(stakingManager.stake({ value: stakeAmount }))
-      .to.emit(stakingManager, "Staked")
-      .withArgs(owner.address, stakeAmount);
+      const balance = await stakingManager.stakes(owner.address);
+      expect(balance).to.equal(stakeAmount);
+    });
 
-    const balance = await stakingManager.stakes(owner.address);
-    expect(balance).to.equal(stakeAmount);
+    it("Should revert if staking amount is zero", async function () {
+      const { stakingManager, owner } = await loadFixture(deployStakingManagerFixture);
+      await expect(stakingManager.connect(owner).stake({ value: 0 })).to.be.revertedWith("StakingManager: Cannot stake 0");
+    });
   });
 
-  it("Should allow a user to unstake and update their balance", async function () {
-    const StakingManagerFactory = await ethers.getContractFactory("StakingManager");
-    const stakingManager = await StakingManagerFactory.deploy();
-    await stakingManager.waitForDeployment();
+  describe("Unstaking", function () {
+    it("Should allow a user to unstake and update their balance", async function () {
+      const { stakingManager, owner } = await loadFixture(deployStakingManagerFixture);
+      const stakeAmount = ethers.parseEther("1.0");
+      await stakingManager.connect(owner).stake({ value: stakeAmount });
 
-    const [owner] = await ethers.getSigners();
-    const stakeAmount = ethers.parseEther("1.0");
+      await expect(stakingManager.connect(owner).unstake(stakeAmount))
+        .to.emit(stakingManager, "Unstaked")
+        .withArgs(owner.address, stakeAmount);
+        
+      expect(await stakingManager.stakes(owner.address)).to.equal(0);
+    });
 
-    // First, stake some tokens
-    await stakingManager.stake({ value: stakeAmount });
-    expect(await stakingManager.stakes(owner.address)).to.equal(stakeAmount);
+    it("Should transfer the correct amount of ETH back to the user", async function () {
+      const { stakingManager, owner } = await loadFixture(deployStakingManagerFixture);
+      const stakeAmount = ethers.parseEther("1.0");
+      await stakingManager.connect(owner).stake({ value: stakeAmount });
 
-    // Now, unstake them.
-    await expect(stakingManager.unstake(stakeAmount))
-      .to.emit(stakingManager, "Unstaked")
-      .withArgs(owner.address, stakeAmount);
-      
-    expect(await stakingManager.stakes(owner.address)).to.equal(0);
-  });
+      await expect(stakingManager.connect(owner).unstake(stakeAmount)).to.changeEtherBalances(
+        [owner, stakingManager],
+        [stakeAmount, -stakeAmount]
+      );
+    });
 
-  it("Should revert if user tries to unstake more than they have", async function () {
-    const StakingManagerFactory = await ethers.getContractFactory("StakingManager");
-    const stakingManager = await StakingManagerFactory.deploy();
-    await stakingManager.waitForDeployment();
+    it("Should revert if user tries to unstake more than they have", async function () {
+      const { stakingManager, owner } = await loadFixture(deployStakingManagerFixture);
+      const stakeAmount = ethers.parseEther("1.0");
+      await stakingManager.connect(owner).stake({ value: stakeAmount });
 
-    const stakeAmount = ethers.parseEther("1.0");
-    const unstakeAmount = ethers.parseEther("2.0");
+      const unstakeAmount = ethers.parseEther("2.0");
+      await expect(stakingManager.connect(owner).unstake(unstakeAmount)).to.be.revertedWith("StakingManager: Insufficient stake");
+    });
 
-    // First, stake some tokens
-    await stakingManager.stake({ value: stakeAmount });
+    it("Should revert if unstaking amount is zero", async function () {
+      const { stakingManager, owner } = await loadFixture(deployStakingManagerFixture);
+      const stakeAmount = ethers.parseEther("1.0");
+      await stakingManager.connect(owner).stake({ value: stakeAmount });
 
-    // Now, try to unstake more. This should fail.
-    await expect(stakingManager.unstake(unstakeAmount)).to.be.revertedWith("Insufficient stake");
+      await expect(stakingManager.connect(owner).unstake(0)).to.be.revertedWith("StakingManager: Cannot unstake 0");
+    });
   });
 });
