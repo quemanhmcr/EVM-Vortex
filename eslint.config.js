@@ -23,4 +23,12 @@ export default tseslint.config(
 
   // Prettier config to disable conflicting rules
   eslintConfigPrettier,
+
+  // Overrides for test files
+  {
+    files: ['**/*.test.ts'],
+    rules: {
+      '@typescript-eslint/no-unused-expressions': 'off',
+    },
+  },
 );
