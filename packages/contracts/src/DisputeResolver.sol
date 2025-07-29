@@ -22,15 +22,18 @@ contract DisputeResolver is Ownable {
     // --- State Variables ---
     mapping(address => bool) public isMember;
     mapping(bytes32 => Dispute) public disputes;
+    uint256 public totalMembers;
 
     // --- Events ---
     event MemberAdded(address indexed member);
     event MemberRemoved(address indexed member);
     event Voted(bytes32 indexed disputeId, address indexed voter, bool voteConfirm);
+    event DisputeResolved(bytes32 indexed disputeId, bool result);
 
     // --- Constructor ---
     constructor(address initialOwner) Ownable(initialOwner) {
         isMember[initialOwner] = true;
+        totalMembers = 1;
         emit MemberAdded(initialOwner);
     }
 
@@ -39,6 +42,7 @@ contract DisputeResolver is Ownable {
         require(_member != address(0), "DisputeResolver: Cannot add the zero address");
         require(!isMember[_member], "DisputeResolver: Address is already a member");
         isMember[_member] = true;
+        totalMembers++;
         emit MemberAdded(_member);
     }
 
@@ -47,15 +51,11 @@ contract DisputeResolver is Ownable {
         require(isMember[_member], "DisputeResolver: Address is not a member");
         require(_member != owner(), "DisputeResolver: Cannot remove the owner");
         isMember[_member] = false;
+        totalMembers--;
         emit MemberRemoved(_member);
     }
 
-    // --- Voting ---
-    /**
-     * @notice Allows a council member to cast a vote on a dispute.
-     * @param disputeId The unique identifier of the dispute.
-     * @param voteConfirm True to confirm fraud, false to deny fraud.
-     */
+    // --- Voting & Resolution ---
     function castVote(bytes32 disputeId, bool voteConfirm) public {
         require(isMember[msg.sender], "DisputeResolver: Caller is not a council member");
         Dispute storage dispute = disputes[disputeId];
@@ -72,5 +72,20 @@ contract DisputeResolver is Ownable {
         emit Voted(disputeId, msg.sender, voteConfirm);
     }
 
-    // Placeholder for future ZK proof verification logic
+    function resolveDispute(bytes32 disputeId) public {
+        Dispute storage dispute = disputes[disputeId];
+        require(!dispute.resolved, "DisputeResolver: Dispute has already been resolved");
+
+        uint256 majorityThreshold = (totalMembers / 2) + 1;
+
+        if (dispute.yesVotes >= majorityThreshold) {
+            dispute.resolved = true;
+            emit DisputeResolved(disputeId, true); // Fraud confirmed
+        } else if (dispute.noVotes >= majorityThreshold) {
+            dispute.resolved = true;
+            emit DisputeResolved(disputeId, false); // Fraud denied
+        } else {
+            revert("DisputeResolver: Majority threshold not reached");
+        }
+    }
 }
