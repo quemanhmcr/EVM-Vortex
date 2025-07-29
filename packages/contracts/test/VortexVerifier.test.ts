@@ -148,12 +148,9 @@ describe('VortexVerifier', function () {
       await vortexVerifier.connect(challenger).challengeData(dataId, { value: CHALLENGE_BOND })
 
       // Assert: Check if the dispute was initialized in DisputeResolver
-      const dispute = await disputeResolver.getDispute(dataId)
-      const [proposer, yesVotes, noVotes, resolved, exists] = dispute
+      const [proposer, resolved, exists] = await disputeResolver.getDispute(dataId)
 
       expect(proposer).to.equal(fixture.proposer.address)
-      expect(yesVotes).to.equal(0)
-      expect(noVotes).to.equal(0)
       expect(resolved).to.be.false
       expect(exists).to.be.true
     })

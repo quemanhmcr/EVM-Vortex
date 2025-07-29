@@ -11,7 +11,7 @@ describe('DisputeResolver', function () {
 
   // This fixture deploys the entire system and sets up all contract links
   async function deployFullSystemFixture() {
-    const [owner, member1, member2, proposer, challenger, otherAccount] = await ethers.getSigners()
+    const [owner, proposer, challenger, otherAccount] = await ethers.getSigners()
 
     // Deploy StakingManager
     const StakingManagerFactory = await ethers.getContractFactory('StakingManager')
@@ -39,10 +39,6 @@ describe('DisputeResolver', function () {
       .setAddresses(await vortexVerifier.getAddress(), await stakingManager.getAddress())
     await stakingManager.connect(owner).setDisputeResolverAddress(await disputeResolver.getAddress())
 
-    // Setup council in DisputeResolver
-    await disputeResolver.connect(owner).addMember(member1.address)
-    await disputeResolver.connect(owner).addMember(member2.address)
-
     // Proposer stakes 1 ETH to be eligible
     const stakeAmount = ethers.parseEther('1')
     await stakingManager.connect(proposer).stake({ value: stakeAmount })
@@ -52,8 +48,6 @@ describe('DisputeResolver', function () {
       disputeResolver,
       stakingManager,
       owner,
-      member1,
-      member2,
       proposer,
       challenger,
       otherAccount,
@@ -77,46 +71,6 @@ describe('DisputeResolver', function () {
     await vortexVerifier.connect(challenger).challengeData(dataId, { value: CHALLENGE_BOND })
     return dataId
   }
-
-  describe('Dispute Resolution Effects', function () {
-    it("Should slash proposer and refund challenger's bond upon a 'fraud' resolution", async function () {
-      const { disputeResolver, stakingManager, vortexVerifier, owner, member1, proposer, challenger } =
-        await loadFixture(deployFullSystemFixture)
-
-      const disputeId = await fullChallengeCycle(vortexVerifier, proposer, challenger)
-
-      // Vote to confirm fraud
-      await disputeResolver.connect(owner).castVote(disputeId, true)
-      await disputeResolver.connect(member1).castVote(disputeId, true)
-
-      // Expect the challenger's balance to increase by the bond amount upon resolution
-      await expect(disputeResolver.resolveDispute(disputeId)).to.changeEtherBalance(
-        challenger,
-        CHALLENGE_BOND,
-      )
-
-      // Expect the proposer to be slashed
-      expect(await stakingManager.stakes(proposer.address)).to.equal(0)
-    })
-
-    it("Should NOT slash proposer and FORFEIT challenger's bond upon a 'no-fraud' resolution", async function () {
-      const { disputeResolver, stakingManager, vortexVerifier, owner, member1, proposer, challenger } =
-        await loadFixture(deployFullSystemFixture)
-
-      const stakeAmount = await stakingManager.stakes(proposer.address)
-      const disputeId = await fullChallengeCycle(vortexVerifier, proposer, challenger)
-
-      // Vote to confirm no fraud
-      await disputeResolver.connect(owner).castVote(disputeId, false)
-      await disputeResolver.connect(member1).castVote(disputeId, false)
-
-      // Expect the challenger's balance to NOT change (bond is forfeited)
-      await expect(disputeResolver.resolveDispute(disputeId)).to.changeEtherBalance(challenger, 0)
-
-      // Expect the proposer's stake to remain unchanged
-      expect(await stakingManager.stakes(proposer.address)).to.equal(stakeAmount)
-    })
-  })
 
   describe('ZK Proof Resolution', function () {
     it('Should call the ZK Verifier and resolve a dispute based on a valid proof', async function () {
@@ -142,7 +96,7 @@ describe('DisputeResolver', function () {
       // Since the mock verifier always returns true, this should resolve as fraud.
       const tx = await disputeResolver
         .connect(challenger)
-        .resolveDisputeWithProof(disputeId, proof.a, proof.b, proof.c, publicSignals)
+        .resolveDispute(disputeId, proof.a, proof.b, proof.c, publicSignals)
 
       await expect(tx)
         .to.emit(disputeResolver, 'DisputeResolved')
