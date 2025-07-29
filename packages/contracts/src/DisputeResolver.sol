@@ -2,19 +2,22 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "./interfaces/IStakingManager.sol";
 
 contract DisputeResolver is Ownable {
     // --- Structs ---
     struct Dispute {
+        address proposer;
         uint256 yesVotes;
         uint256 noVotes;
         mapping(address => bool) hasVoted;
         bool resolved;
-        bool exists; // To differentiate from default struct values
+        bool exists;
     }
 
     // --- State Variables ---
     address public vortexVerifierAddress;
+    IStakingManager public stakingManager;
     mapping(address => bool) public isMember;
     mapping(bytes32 => Dispute) public disputes;
     uint256 public totalMembers;
@@ -23,8 +26,8 @@ contract DisputeResolver is Ownable {
     event MemberAdded(address indexed member);
     event MemberRemoved(address indexed member);
     event Voted(bytes32 indexed disputeId, address indexed voter, bool voteConfirm);
-    event DisputeResolved(bytes32 indexed disputeId, bool result);
-    event DisputeCreated(bytes32 indexed disputeId);
+    event DisputeResolved(bytes32 indexed disputeId, bool result, address indexed proposer);
+    event DisputeCreated(bytes32 indexed disputeId, address indexed proposer);
 
     // --- Modifiers ---
     modifier onlyVortexVerifier() {
@@ -41,18 +44,19 @@ contract DisputeResolver is Ownable {
 
     // --- External Functions ---
 
-    function setVortexVerifierAddress(address _address) external onlyOwner {
-        require(_address != address(0), "DisputeResolver: Zero address not allowed");
-        vortexVerifierAddress = _address;
+    function setAddresses(address _verifier, address _stakingManager) external onlyOwner {
+        require(_verifier != address(0) && _stakingManager != address(0), "DisputeResolver: Zero address");
+        vortexVerifierAddress = _verifier;
+        stakingManager = IStakingManager(_stakingManager);
     }
 
-    function createDispute(bytes32 disputeId) external onlyVortexVerifier {
+    function createDispute(bytes32 disputeId, address proposer) external onlyVortexVerifier {
         require(!disputes[disputeId].exists, "DisputeResolver: Dispute already exists");
         disputes[disputeId].exists = true;
-        emit DisputeCreated(disputeId);
+        disputes[disputeId].proposer = proposer;
+        emit DisputeCreated(disputeId, proposer);
     }
 
-    // --- Voting & Resolution ---
     function castVote(bytes32 disputeId, bool voteConfirm) public {
         require(isMember[msg.sender], "DisputeResolver: Caller is not a council member");
         Dispute storage dispute = disputes[disputeId];
@@ -76,23 +80,28 @@ contract DisputeResolver is Ownable {
         require(!dispute.resolved, "DisputeResolver: Dispute has already been resolved");
 
         uint256 majorityThreshold = (totalMembers / 2) + 1;
+        bool isFraud = false;
 
         if (dispute.yesVotes >= majorityThreshold) {
-            dispute.resolved = true;
-            emit DisputeResolved(disputeId, true); // Fraud confirmed
+            isFraud = true;
         } else if (dispute.noVotes >= majorityThreshold) {
-            dispute.resolved = true;
-            emit DisputeResolved(disputeId, false); // Fraud denied
+            isFraud = false;
         } else {
             revert("DisputeResolver: Majority threshold not reached");
+        }
+
+        dispute.resolved = true;
+        emit DisputeResolved(disputeId, isFraud, dispute.proposer);
+
+        if (isFraud) {
+            stakingManager.slash(dispute.proposer);
         }
     }
 
     // --- View Functions ---
-
-    function getDispute(bytes32 disputeId) external view returns (uint256, uint256, bool, bool) {
+    function getDispute(bytes32 disputeId) external view returns (address, uint256, uint256, bool, bool) {
         Dispute storage d = disputes[disputeId];
-        return (d.yesVotes, d.noVotes, d.resolved, d.exists);
+        return (d.proposer, d.yesVotes, d.noVotes, d.resolved, d.exists);
     }
 
     // --- Membership Management ---

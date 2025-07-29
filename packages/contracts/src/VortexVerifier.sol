@@ -97,8 +97,8 @@ contract VortexVerifier {
 
         proposal.isChallenged = true;
         
-        // Initiate the dispute in the resolver contract
-        disputeResolver.createDispute(_dataId);
+        // Initiate the dispute in the resolver contract, passing the original proposer's address
+        disputeResolver.createDispute(_dataId, proposal.proposer);
 
         emit DataChallenged(_dataId, msg.sender);
     }
