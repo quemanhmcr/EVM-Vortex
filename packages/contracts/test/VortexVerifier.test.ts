@@ -41,6 +41,9 @@ describe('VortexVerifier', function () {
     )
     await vortexVerifier.waitForDeployment()
 
+    // Crucial step: Set the VortexVerifier address in DisputeResolver so it can be called back
+    await disputeResolver.connect(owner).setVortexVerifierAddress(await vortexVerifier.getAddress());
+
     // Setup: 'proposer' stakes 1 ETH to be eligible
     const stakeAmount = ethers.parseEther('1')
     await stakingManager.connect(proposer).stake({ value: stakeAmount })
@@ -121,6 +124,22 @@ describe('VortexVerifier', function () {
       await vortexVerifier.connect(challenger).challengeData(dataId)
       const proposal = await vortexVerifier.proposedData(dataId)
       expect(proposal.isChallenged).to.be.true
+    })
+
+    it('Should create a new dispute in DisputeResolver upon a successful challenge', async function () {
+      const { vortexVerifier, disputeResolver, challenger } = fixture
+      
+      // Action: Challenge the data
+      await vortexVerifier.connect(challenger).challengeData(dataId)
+
+      // Assert: Check if the dispute was initialized in DisputeResolver
+      const dispute = await disputeResolver.getDispute(dataId)
+      const [yesVotes, noVotes, resolved, exists] = dispute
+
+      expect(yesVotes).to.equal(0)
+      expect(noVotes).to.equal(0)
+      expect(resolved).to.be.false
+      expect(exists).to.be.true
     })
 
     it('Should revert if trying to challenge an already challenged proposal', async function () {
