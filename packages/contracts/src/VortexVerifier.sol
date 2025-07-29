@@ -96,9 +96,10 @@ contract VortexVerifier {
         require(!proposal.isChallenged, "VortexVerifier: Proposal already challenged");
 
         proposal.isChallenged = true;
-        emit DataChallenged(_dataId, msg.sender);
+        
+        // Initiate the dispute in the resolver contract
+        disputeResolver.createDispute(_dataId);
 
-        // Future step: Interact with DisputeResolver
-        // disputeResolver.initiateDispute(_dataId, msg.sender);
+        emit DataChallenged(_dataId, msg.sender);
     }
 }
