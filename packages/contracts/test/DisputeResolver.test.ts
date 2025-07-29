@@ -3,7 +3,7 @@ import { expect } from 'chai'
 import { ethers } from 'hardhat'
 import { EventLog } from 'ethers'
 import { HardhatEthersSigner } from '@nomicfoundation/hardhat-ethers/signers'
-import { DisputeResolver, StakingManager, VortexVerifier } from '../typechain-types'
+import { VortexVerifier } from '../typechain-types'
 
 describe('DisputeResolver', function () {
   const CHALLENGE_PERIOD = 10 * 60 // 10 minutes
@@ -83,7 +83,6 @@ describe('DisputeResolver', function () {
       const { disputeResolver, stakingManager, vortexVerifier, owner, member1, proposer, challenger } =
         await loadFixture(deployFullSystemFixture)
 
-      const stakeAmount = await stakingManager.stakes(proposer.address)
       const disputeId = await fullChallengeCycle(vortexVerifier, proposer, challenger)
 
       // Vote to confirm fraud

@@ -1,7 +1,0 @@
-fix(ci): resolve ESLint v9 configuration issues
-
-- Migrate from '.eslintrc.js' to 'eslint.config.js' to support ESLint v9+.
-- Add 'typescript-eslint' and '@eslint/js' as explicit dependencies.
-- Set 'type: module' in the root package.json.
-- Update package lint scripts to be more specific, avoiding errors in empty directories.
-- Add placeholder index.ts files to services to ensure CI passes.
