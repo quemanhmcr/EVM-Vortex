@@ -14,4 +14,10 @@ interface IStakingManager {
      * @return The amount staked in wei.
      */
     function stakes(address user) external view returns (uint256);
+
+    /**
+     * @notice Slashes the stake of a given address.
+     * @param proposer The address of the user to slash.
+     */
+    function slash(address proposer) external;
 }

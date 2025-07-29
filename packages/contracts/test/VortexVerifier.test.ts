@@ -7,6 +7,7 @@ import { EventLog } from 'ethers'
 
 describe('VortexVerifier', function () {
   const CHALLENGE_PERIOD = 10 * 60 // 10 minutes
+  const CHALLENGE_BOND = ethers.parseEther('0.1') // Set a bond of 0.1 ETH
 
   // Define a type for our fixture
   type FixtureType = {
@@ -38,11 +39,12 @@ describe('VortexVerifier', function () {
       await stakingManager.getAddress(),
       await disputeResolver.getAddress(),
       CHALLENGE_PERIOD,
+      CHALLENGE_BOND, // Provide the bond value
     )
     await vortexVerifier.waitForDeployment()
 
-    // Crucial step: Set the VortexVerifier address in DisputeResolver so it can be called back
-    await disputeResolver.connect(owner).setVortexVerifierAddress(await vortexVerifier.getAddress());
+    // Crucial step: Set the addresses in DisputeResolver so it can be called back
+    await disputeResolver.connect(owner).setAddresses(await vortexVerifier.getAddress(), await stakingManager.getAddress());
 
     // Setup: 'proposer' stakes 1 ETH to be eligible
     const stakeAmount = ethers.parseEther('1')
@@ -74,12 +76,13 @@ describe('VortexVerifier', function () {
   }
 
   describe('Deployment', function () {
-    it('Should set the correct addresses and challenge period', async function () {
+    it('Should set the correct addresses, challenge period, and bond', async function () {
       const { vortexVerifier, stakingManager, disputeResolver } =
         await loadFixture(deployContractsFixture)
       expect(await vortexVerifier.stakingManager()).to.equal(await stakingManager.getAddress())
       expect(await vortexVerifier.disputeResolver()).to.equal(await disputeResolver.getAddress())
       expect(await vortexVerifier.challengePeriod()).to.equal(CHALLENGE_PERIOD)
+      expect(await vortexVerifier.challengeBond()).to.equal(CHALLENGE_BOND)
     })
   })
 
@@ -99,29 +102,41 @@ describe('VortexVerifier', function () {
     it('Should revert if trying to challenge data that does not exist', async function () {
       const { vortexVerifier, challenger } = fixture
       const fakeDataId = ethers.keccak256(ethers.toUtf8Bytes('non-existent'))
-      await expect(vortexVerifier.connect(challenger).challengeData(fakeDataId)).to.be.revertedWith(
-        'VortexVerifier: Proposal does not exist',
-      )
+      await expect(
+        vortexVerifier.connect(challenger).challengeData(fakeDataId, { value: CHALLENGE_BOND }),
+      ).to.be.revertedWith('VortexVerifier: Proposal does not exist')
     })
 
     it('Should revert if trying to challenge after the challenge period has ended', async function () {
       const { vortexVerifier, challenger } = fixture
       await time.increase(CHALLENGE_PERIOD + 1)
+      await expect(
+        vortexVerifier.connect(challenger).challengeData(dataId, { value: CHALLENGE_BOND }),
+      ).to.be.revertedWith('VortexVerifier: Challenge period has ended')
+    })
+
+    it('Should revert if the challenger does not provide the exact bond amount', async function () {
+      const { vortexVerifier, challenger } = fixture
+      // Attempt to challenge without sending any ETH
       await expect(vortexVerifier.connect(challenger).challengeData(dataId)).to.be.revertedWith(
-        'VortexVerifier: Challenge period has ended',
+        'VortexVerifier: Challenge bond must be provided',
       )
+      // Attempt to challenge with an incorrect bond amount
+      await expect(
+        vortexVerifier.connect(challenger).challengeData(dataId, { value: ethers.parseEther('0.05') }),
+      ).to.be.revertedWith('VortexVerifier: Challenge bond must be provided')
     })
 
-    it('Should allow a user to challenge a valid proposal', async function () {
+    it('Should allow a user to challenge a valid proposal with the correct bond', async function () {
       const { vortexVerifier, challenger } = fixture
-      await expect(vortexVerifier.connect(challenger).challengeData(dataId))
+      await expect(vortexVerifier.connect(challenger).challengeData(dataId, { value: CHALLENGE_BOND }))
         .to.emit(vortexVerifier, 'DataChallenged')
-        .withArgs(dataId, challenger.address)
+        .withArgs(dataId, challenger.address, CHALLENGE_BOND)
     })
 
-    it('Should set the isChallenged flag to true', async function () {
+    it('Should set the isChallenged flag to true on a successful challenge', async function () {
       const { vortexVerifier, challenger } = fixture
-      await vortexVerifier.connect(challenger).challengeData(dataId)
+      await vortexVerifier.connect(challenger).challengeData(dataId, { value: CHALLENGE_BOND })
       const proposal = await vortexVerifier.proposedData(dataId)
       expect(proposal.isChallenged).to.be.true
     })
@@ -130,12 +145,13 @@ describe('VortexVerifier', function () {
       const { vortexVerifier, disputeResolver, challenger } = fixture
       
       // Action: Challenge the data
-      await vortexVerifier.connect(challenger).challengeData(dataId)
+      await vortexVerifier.connect(challenger).challengeData(dataId, { value: CHALLENGE_BOND })
 
       // Assert: Check if the dispute was initialized in DisputeResolver
       const dispute = await disputeResolver.getDispute(dataId)
-      const [yesVotes, noVotes, resolved, exists] = dispute
+      const [proposer, yesVotes, noVotes, resolved, exists] = dispute
 
+      expect(proposer).to.equal(fixture.proposer.address)
       expect(yesVotes).to.equal(0)
       expect(noVotes).to.equal(0)
       expect(resolved).to.be.false
@@ -144,14 +160,16 @@ describe('VortexVerifier', function () {
 
     it('Should revert if trying to challenge an already challenged proposal', async function () {
       const { vortexVerifier, challenger } = fixture
-      await vortexVerifier.connect(challenger).challengeData(dataId) // First challenge
-      await expect(vortexVerifier.connect(challenger).challengeData(dataId)) // Second challenge
+      await vortexVerifier.connect(challenger).challengeData(dataId, { value: CHALLENGE_BOND }) // First challenge
+      await expect(
+        vortexVerifier.connect(challenger).challengeData(dataId, { value: CHALLENGE_BOND }),
+      ) // Second challenge
         .to.be.revertedWith('VortexVerifier: Proposal already challenged')
     })
 
     it('Should revert executeIntent for a challenged proposal', async function () {
       const { vortexVerifier, challenger } = fixture
-      await vortexVerifier.connect(challenger).challengeData(dataId)
+      await vortexVerifier.connect(challenger).challengeData(dataId, { value: CHALLENGE_BOND })
       await time.increase(CHALLENGE_PERIOD + 1) // Time passes
       await expect(vortexVerifier.executeIntent(dataId)).to.be.revertedWith(
         'VortexVerifier: Proposal is under challenge',

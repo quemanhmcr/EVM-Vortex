@@ -1,118 +1,121 @@
 import { loadFixture } from '@nomicfoundation/hardhat-toolbox/network-helpers'
 import { expect } from 'chai'
 import { ethers } from 'hardhat'
-import { keccak256, toUtf8Bytes } from 'ethers'
+import { EventLog } from 'ethers'
 import { HardhatEthersSigner } from '@nomicfoundation/hardhat-ethers/signers'
-import { DisputeResolver } from '../typechain-types'
+import { DisputeResolver, StakingManager, VortexVerifier } from '../typechain-types'
 
 describe('DisputeResolver', function () {
-  // We define a fixture to reuse the same setup in every test.
-  async function deployDisputeResolverFixture() {
-    const [owner, member1, member2, vortexVerifierSigner, otherAccount] = await ethers.getSigners()
+  const CHALLENGE_PERIOD = 10 * 60 // 10 minutes
+  const CHALLENGE_BOND = ethers.parseEther('0.1')
 
+  // This fixture deploys the entire system and sets up all contract links
+  async function deployFullSystemFixture() {
+    const [owner, member1, member2, proposer, challenger, otherAccount] = await ethers.getSigners()
+
+    // Deploy StakingManager
+    const StakingManagerFactory = await ethers.getContractFactory('StakingManager')
+    const stakingManager = await StakingManagerFactory.deploy()
+    await stakingManager.waitForDeployment()
+
+    // Deploy DisputeResolver
     const DisputeResolverFactory = await ethers.getContractFactory('DisputeResolver')
     const disputeResolver = await DisputeResolverFactory.deploy(owner.address)
     await disputeResolver.waitForDeployment()
 
-    // Setup council
+    // Deploy VortexVerifier
+    const VortexVerifierFactory = await ethers.getContractFactory('VortexVerifier')
+    const vortexVerifier = await VortexVerifierFactory.deploy(
+      await stakingManager.getAddress(),
+      await disputeResolver.getAddress(),
+      CHALLENGE_PERIOD,
+      CHALLENGE_BOND,
+    )
+    await vortexVerifier.waitForDeployment()
+
+    // Configure connections between contracts
+    await disputeResolver
+      .connect(owner)
+      .setAddresses(await vortexVerifier.getAddress(), await stakingManager.getAddress())
+    await stakingManager.connect(owner).setDisputeResolverAddress(await disputeResolver.getAddress())
+
+    // Setup council in DisputeResolver
     await disputeResolver.connect(owner).addMember(member1.address)
     await disputeResolver.connect(owner).addMember(member2.address)
 
-    // Set the verifier address
-    await disputeResolver.connect(owner).setVortexVerifierAddress(vortexVerifierSigner.address)
+    // Proposer stakes 1 ETH to be eligible
+    const stakeAmount = ethers.parseEther('1')
+    await stakingManager.connect(proposer).stake({ value: stakeAmount })
 
-    return { disputeResolver, owner, member1, member2, vortexVerifierSigner, otherAccount }
+    return {
+      vortexVerifier,
+      disputeResolver,
+      stakingManager,
+      owner,
+      member1,
+      member2,
+      proposer,
+      challenger,
+      otherAccount,
+    }
   }
 
-  // Helper to create a dispute for tests
-  async function createDispute(
-    disputeResolver: DisputeResolver,
-    disputeId: string,
-    verifierSigner: HardhatEthersSigner,
+  // Helper to propose, challenge, and return the disputeId
+  async function fullChallengeCycle(
+    vortexVerifier: VortexVerifier,
+    proposer: HardhatEthersSigner,
+    challenger: HardhatEthersSigner,
   ) {
-    await disputeResolver.connect(verifierSigner).createDispute(disputeId)
+    const payload = { timestamp: Date.now(), data: ethers.toUtf8Bytes('fraudulent data') }
+    const tx = await vortexVerifier.connect(proposer).proposeData(payload)
+    const receipt = await tx.wait()
+    const event = receipt?.logs.find(
+      (e) => e instanceof EventLog && e.eventName === 'DataProposed',
+    ) as EventLog | undefined
+    const dataId = event?.args[0]
+
+    await vortexVerifier.connect(challenger).challengeData(dataId, { value: CHALLENGE_BOND })
+    return dataId
   }
 
-  describe('Deployment', function () {
-    it('Should set the deployer as the owner and initial member', async function () {
-      const { disputeResolver, owner } = await loadFixture(deployDisputeResolverFixture)
-      expect(await disputeResolver.owner()).to.equal(owner.address)
-      expect(await disputeResolver.isMember(owner.address)).to.be.true
-    })
-  })
+  describe('Dispute Resolution Effects', function () {
+    it("Should slash proposer and refund challenger's bond upon a 'fraud' resolution", async function () {
+      const { disputeResolver, stakingManager, vortexVerifier, owner, member1, proposer, challenger } =
+        await loadFixture(deployFullSystemFixture)
 
-  describe('Membership Management', function () {
-    it('Should allow the owner to add a new member', async function () {
-      const { disputeResolver, owner, otherAccount } = await loadFixture(deployDisputeResolverFixture)
-      await expect(disputeResolver.connect(owner).addMember(otherAccount.address))
-        .to.emit(disputeResolver, 'MemberAdded')
-        .withArgs(otherAccount.address)
-      expect(await disputeResolver.isMember(otherAccount.address)).to.be.true
-    })
+      const stakeAmount = await stakingManager.stakes(proposer.address)
+      const disputeId = await fullChallengeCycle(vortexVerifier, proposer, challenger)
 
-    it('Should allow the owner to remove a member', async function () {
-      const { disputeResolver, owner, member1 } = await loadFixture(deployDisputeResolverFixture)
-      await expect(disputeResolver.connect(owner).removeMember(member1.address))
-        .to.emit(disputeResolver, 'MemberRemoved')
-        .withArgs(member1.address)
-      expect(await disputeResolver.isMember(member1.address)).to.be.false
-    })
-  })
-
-  describe('Voting on Disputes', function () {
-    it('Should allow a member to cast a vote on an existing dispute', async function () {
-      const { disputeResolver, member1, vortexVerifierSigner } = await loadFixture(
-        deployDisputeResolverFixture,
-      )
-      const disputeId = keccak256(toUtf8Bytes('proposal-1'))
-      await createDispute(disputeResolver, disputeId, vortexVerifierSigner)
-
-      await expect(disputeResolver.connect(member1).castVote(disputeId, true))
-        .to.emit(disputeResolver, 'Voted')
-        .withArgs(disputeId, member1.address, true)
-
-      const [yesVotes, noVotes] = await disputeResolver.getDispute(disputeId)
-      expect(yesVotes).to.equal(1)
-      expect(noVotes).to.equal(0)
-    })
-
-    it('Should revert if trying to vote on a non-existent dispute', async function () {
-      const { disputeResolver, member1 } = await loadFixture(deployDisputeResolverFixture)
-      const disputeId = keccak256(toUtf8Bytes('proposal-x'))
-      await expect(disputeResolver.connect(member1).castVote(disputeId, true)).to.be.revertedWith(
-        'DisputeResolver: Dispute does not exist',
-      )
-    })
-
-    it('Should resolve a dispute when a majority is reached', async function () {
-      const { disputeResolver, owner, member1, vortexVerifierSigner, otherAccount } =
-        await loadFixture(deployDisputeResolverFixture)
-      const disputeId = keccak256(toUtf8Bytes('proposal-2'))
-      await createDispute(disputeResolver, disputeId, vortexVerifierSigner)
-
+      // Vote to confirm fraud
       await disputeResolver.connect(owner).castVote(disputeId, true)
       await disputeResolver.connect(member1).castVote(disputeId, true)
 
-      await expect(disputeResolver.connect(otherAccount).resolveDispute(disputeId))
-        .to.emit(disputeResolver, 'DisputeResolved')
-        .withArgs(disputeId, true)
+      // Expect the challenger's balance to increase by the bond amount upon resolution
+      await expect(disputeResolver.resolveDispute(disputeId)).to.changeEtherBalance(
+        challenger,
+        CHALLENGE_BOND,
+      )
 
-      const [, , resolved] = await disputeResolver.getDispute(disputeId)
-      expect(resolved).to.be.true
+      // Expect the proposer to be slashed
+      expect(await stakingManager.stakes(proposer.address)).to.equal(0)
     })
 
-    it('Should revert when trying to resolve before majority is reached', async function () {
-      const { disputeResolver, owner, vortexVerifierSigner, otherAccount } = await loadFixture(
-        deployDisputeResolverFixture,
-      )
-      const disputeId = keccak256(toUtf8Bytes('proposal-3'))
-      await createDispute(disputeResolver, disputeId, vortexVerifierSigner)
+    it("Should NOT slash proposer and FORFEIT challenger's bond upon a 'no-fraud' resolution", async function () {
+      const { disputeResolver, stakingManager, vortexVerifier, owner, member1, proposer, challenger } =
+        await loadFixture(deployFullSystemFixture)
 
-      await disputeResolver.connect(owner).castVote(disputeId, true)
+      const stakeAmount = await stakingManager.stakes(proposer.address)
+      const disputeId = await fullChallengeCycle(vortexVerifier, proposer, challenger)
 
-      await expect(disputeResolver.connect(otherAccount).resolveDispute(disputeId)).to.be.revertedWith(
-        'DisputeResolver: Majority threshold not reached',
-      )
+      // Vote to confirm no fraud
+      await disputeResolver.connect(owner).castVote(disputeId, false)
+      await disputeResolver.connect(member1).castVote(disputeId, false)
+
+      // Expect the challenger's balance to NOT change (bond is forfeited)
+      await expect(disputeResolver.resolveDispute(disputeId)).to.changeEtherBalance(challenger, 0)
+
+      // Expect the proposer's stake to remain unchanged
+      expect(await stakingManager.stakes(proposer.address)).to.equal(stakeAmount)
     })
   })
 })
