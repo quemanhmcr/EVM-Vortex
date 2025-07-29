@@ -111,9 +111,16 @@ importers:
 
   services/zk-challenger:
     dependencies:
-      '@evm-vortex/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.6.1
+      ethers:
+        specifier: ^6.13.1
+        version: 6.15.0
+    devDependencies:
+      ts-node-dev:
+        specifier: ^2.0.0
+        version: 2.0.0(@types/node@24.1.0)(typescript@5.8.3)
 
 packages:
 
