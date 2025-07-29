@@ -1,78 +1,86 @@
-import { ethers } from 'hardhat'
-import { spawn } from 'child_process'
-import path from 'path'
+import { ethers } from "hardhat";
+import { spawn, ChildProcess } from "child_process";
+import path from "path";
+
+function launchService(name: string, servicePath: string, env: NodeJS.ProcessEnv): ChildProcess {
+  console.log(`\n   - Launching ${name} service...`);
+  
+  const child = spawn("pnpm", ["dev"], {
+    cwd: servicePath,
+    env: env,
+    stdio: "inherit",
+    shell: true,
+  });
+
+  child.on("error", (error) => {
+    console.error(`❌ Error spawning ${name} service: ${error.message}`);
+  });
+
+  child.on("exit", (code) => {
+    console.log(`👋 ${name} service exited with code ${code}`);
+  });
+
+  console.log(`   ✅ ${name} service is now running.`);
+  return child;
+}
 
 async function main() {
-  console.log('🚀  Starting automated deployment and service launch...')
+  console.log("🚀  Starting E2E environment with Witness and Challenger...");
 
-  // 1. Deploy all contracts
-  console.log('   - Deploying contracts...')
-  const [deployer, proposer] = await ethers.getSigners()
+  // 1. Deploy contracts
+  console.log("   - Deploying contracts...");
+  const [deployer, proposer, challenger] = await ethers.getSigners();
+  
+  const stakingManager = await ethers.deployContract("StakingManager");
+  await stakingManager.waitForDeployment();
 
-  const stakingManager = await ethers.deployContract('StakingManager')
-  await stakingManager.waitForDeployment()
+  const disputeResolver = await ethers.deployContract("DisputeResolver", [deployer.address]);
+  await disputeResolver.waitForDeployment();
 
-  const disputeResolver = await ethers.deployContract('DisputeResolver', [deployer.address])
-  await disputeResolver.waitForDeployment()
-
-  const CHALLENGE_PERIOD = 10 * 60 // 10 minutes
-  const vortexVerifier = await ethers.deployContract('VortexVerifier', [
+  const vortexVerifier = await ethers.deployContract("VortexVerifier", [
     await stakingManager.getAddress(),
     await disputeResolver.getAddress(),
-    CHALLENGE_PERIOD,
-  ])
-  await vortexVerifier.waitForDeployment()
+    10 * 60, // 10 min challenge period
+  ]);
+  await vortexVerifier.waitForDeployment();
+  
+  console.log(`   ✅ VortexVerifier deployed to: ${await vortexVerifier.getAddress()}`);
 
-  console.log(`   ✅ StakingManager deployed to: ${await stakingManager.getAddress()}`)
-  console.log(`   ✅ DisputeResolver deployed to: ${await disputeResolver.getAddress()}`)
-  console.log(`   ✅ VortexVerifier deployed to: ${await vortexVerifier.getAddress()}`)
+  // 2. Stake for the proposer
+  console.log(`\n   - Staking 1 ETH for proposer: ${proposer.address}...`);
+  await stakingManager.connect(proposer).stake({ value: ethers.parseEther("1.0") });
+  console.log("   ✅ Staking complete.");
 
-  // 2. Stake funds for the proposer account
-  console.log(`\n   - Staking 1 ETH for proposer: ${proposer.address}...`)
-  const stakeAmount = ethers.parseEther('1.0')
-  const stakeTx = await stakingManager.connect(proposer).stake({ value: stakeAmount })
-  await stakeTx.wait()
-  console.log('   ✅ Staking complete.')
+  // 3. Launch services
+  const rpcUrl = "http://127.0.0.1:8545";
+  const vortexAddress = await vortexVerifier.getAddress();
 
-  // 3. Prepare and launch the witness-network service
-  console.log('\n   - Preparing to launch Witness Network service...')
-  const witnessNetworkPath = path.join(__dirname, '../../../services/witness-network')
-
-  // These environment variables are passed directly to the child process
-  const serviceEnv = {
+  // Launch Witness Network
+  const witnessEnv = {
     ...process.env,
-    RPC_URL: 'http://127.0.0.1:8545',
-    PROPOSER_PRIVATE_KEY: '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d', // Default Hardhat account #1
-    VORTEX_VERIFIER_ADDRESS: await vortexVerifier.getAddress(),
-    PROPOSE_INTERVAL_MS: '15000', // 15 seconds for faster local dev feedback
-  }
+    RPC_URL: rpcUrl,
+    PROPOSER_PRIVATE_KEY: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d", // Hardhat #1
+    VORTEX_VERIFIER_ADDRESS: vortexAddress,
+    PROPOSE_INTERVAL_MS: "10000", // 10 seconds
+  };
+  const witnessPath = path.join(__dirname, "../../../services/witness-network");
+  launchService("Witness Network", witnessPath, witnessEnv);
 
-  console.log('   - Starting service with the following configuration:')
-  console.log(`     - RPC_URL: ${serviceEnv.RPC_URL}`)
-  console.log(`     - VORTEX_VERIFIER_ADDRESS: ${serviceEnv.VORTEX_VERIFIER_ADDRESS}`)
-  console.log(`     - PROPOSER: ${proposer.address}`)
+  // Launch ZK Challenger
+  const challengerEnv = {
+    ...process.env,
+    RPC_URL: rpcUrl,
+    CHALLENGER_PRIVATE_KEY: "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a", // Hardhat #2
+    VORTEX_VERIFIER_ADDRESS: vortexAddress,
+  };
+  const challengerPath = path.join(__dirname, "../../../services/zk-challenger");
+  launchService("ZK Challenger", challengerPath, challengerEnv);
 
-  // Use spawn to run `pnpm dev` in the witness-network directory
-  const child = spawn('pnpm', ['dev'], {
-    cwd: witnessNetworkPath,
-    env: serviceEnv,
-    stdio: 'inherit', // This will pipe the child's output to our terminal
-    shell: true, // FIX: Use the system shell to find pnpm correctly
-  })
-
-  child.on('error', (error) => {
-    console.error(`❌ Error spawning witness-network service: ${error.message}`)
-  })
-
-  child.on('exit', (code) => {
-    console.log(`👋 Witness-network service exited with code ${code}`)
-  })
-
-  console.log('\n✅  Witness Network service is now running. Check for logs below.')
-  console.log('   (To stop everything, press Ctrl+C in the Hardhat node terminal, then here)')
+  console.log("\n✅  All services are now running. Check for logs.");
+  console.log("   (To stop everything, press Ctrl+C in the Hardhat node terminal, then here)");
 }
 
 main().catch((error) => {
-  console.error('❌ Deployment script failed:', error)
-  process.exit(1)
-})
+  console.error("❌ E2E script failed:", error);
+  process.exit(1);
+});

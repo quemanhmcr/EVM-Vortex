@@ -1,0 +1,3 @@
+fix(deps): add missing ts-node-dev to zk-challenger
+
+The zk-challenger service failed to start because it was missing the ts-node-dev dependency required by its 'dev' script. This commit adds the missing dependency, resolving the 'command not found' error during the e2e test run.
