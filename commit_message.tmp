@@ -1,3 +1,5 @@
-fix(deps): add missing ts-node-dev to zk-challenger
+feat(challenger): implement basic challenger service
 
-The zk-challenger service failed to start because it was missing the ts-node-dev dependency required by its 'dev' script. This commit adds the missing dependency, resolving the 'command not found' error during the e2e test run.
+This commit introduces the initial implementation of the zk-challenger service. It listens for DataProposed events, applies a basic fraud detection rule, and automatically calls the challengeData function if fraudulent data is detected.
+
+The e2e test script has been updated to launch both the witness and challenger services, demonstrating a full happy/unhappy path loop. All linting and dependency issues discovered during the final quality check have been resolved.
