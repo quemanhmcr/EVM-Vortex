@@ -41,6 +41,7 @@ async function main() {
     await stakingManager.getAddress(),
     await disputeResolver.getAddress(),
     10 * 60, // 10 min challenge period
+    ethers.parseEther('0.1'), // The missing challenge bond
   ])
   await vortexVerifier.waitForDeployment()
 

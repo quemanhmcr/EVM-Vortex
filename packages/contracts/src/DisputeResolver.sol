@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/IStakingManager.sol";
+import "./interfaces/IVortexVerifier.sol";
 
 contract DisputeResolver is Ownable {
     // --- Structs ---
@@ -93,6 +94,10 @@ contract DisputeResolver is Ownable {
         dispute.resolved = true;
         emit DisputeResolved(disputeId, isFraud, dispute.proposer);
 
+        // Finalize the challenge in the verifier (handles bond)
+        IVortexVerifier(vortexVerifierAddress).finalizeChallenge(disputeId, isFraud);
+
+        // Slash the proposer if fraud was confirmed
         if (isFraud) {
             stakingManager.slash(dispute.proposer);
         }
