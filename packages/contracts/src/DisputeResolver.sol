@@ -4,24 +4,12 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/IStakingManager.sol";
 import "./interfaces/IVortexVerifier.sol";
-
-// A generic interface for any ZK Verifier contract
-interface IVerifier {
-    function verifyProof(
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c,
-        uint256[2] calldata input
-    ) external view returns (bool);
-}
+import "./interfaces/IVerifier.sol";
 
 contract DisputeResolver is Ownable {
     // --- Structs ---
     struct Dispute {
         address proposer;
-        uint256 yesVotes;
-        uint256 noVotes;
-        mapping(address => bool) hasVoted;
         bool resolved;
         bool exists;
     }
@@ -30,14 +18,9 @@ contract DisputeResolver is Ownable {
     address public vortexVerifierAddress;
     address public zkVerifierAddress;
     IStakingManager public stakingManager;
-    mapping(address => bool) public isMember;
     mapping(bytes32 => Dispute) public disputes;
-    uint256 public totalMembers;
 
     // --- Events ---
-    event MemberAdded(address indexed member);
-    event MemberRemoved(address indexed member);
-    event Voted(bytes32 indexed disputeId, address indexed voter, bool voteConfirm);
     event DisputeResolved(bytes32 indexed disputeId, bool result, address indexed proposer);
     event DisputeCreated(bytes32 indexed disputeId, address indexed proposer);
 
@@ -48,11 +31,7 @@ contract DisputeResolver is Ownable {
     }
 
     // --- Constructor ---
-    constructor(address initialOwner) Ownable(initialOwner) {
-        isMember[initialOwner] = true;
-        totalMembers = 1;
-        emit MemberAdded(initialOwner);
-    }
+    constructor(address initialOwner) Ownable(initialOwner) {}
 
     // --- External Functions ---
 
@@ -73,43 +52,7 @@ contract DisputeResolver is Ownable {
         emit DisputeCreated(disputeId, proposer);
     }
 
-    function castVote(bytes32 disputeId, bool voteConfirm) public {
-        require(isMember[msg.sender], "DisputeResolver: Caller is not a council member");
-        Dispute storage dispute = disputes[disputeId];
-        require(dispute.exists, "DisputeResolver: Dispute does not exist");
-        require(!dispute.hasVoted[msg.sender], "DisputeResolver: Member has already voted");
-        require(!dispute.resolved, "DisputeResolver: Dispute has already been resolved");
-
-        dispute.hasVoted[msg.sender] = true;
-        if (voteConfirm) {
-            dispute.yesVotes++;
-        } else {
-            dispute.noVotes++;
-        }
-
-        emit Voted(disputeId, msg.sender, voteConfirm);
-    }
-
-    function resolveDispute(bytes32 disputeId) public {
-        Dispute storage dispute = disputes[disputeId];
-        require(dispute.exists, "DisputeResolver: Dispute does not exist");
-        require(!dispute.resolved, "DisputeResolver: Dispute has already been resolved");
-
-        uint256 majorityThreshold = (totalMembers / 2) + 1;
-        bool isFraud = false;
-
-        if (dispute.yesVotes >= majorityThreshold) {
-            isFraud = true;
-        } else if (dispute.noVotes >= majorityThreshold) {
-            isFraud = false;
-        } else {
-            revert("DisputeResolver: Majority threshold not reached");
-        }
-
-        _resolve(disputeId, isFraud);
-    }
-
-    function resolveDisputeWithProof(
+    function resolveDispute(
         bytes32 disputeId,
         uint256[2] calldata a,
         uint256[2][2] calldata b,
@@ -144,26 +87,8 @@ contract DisputeResolver is Ownable {
     }
 
     // --- View Functions ---
-    function getDispute(bytes32 disputeId) external view returns (address, uint256, uint256, bool, bool) {
+    function getDispute(bytes32 disputeId) external view returns (address, bool, bool) {
         Dispute storage d = disputes[disputeId];
-        return (d.proposer, d.yesVotes, d.noVotes, d.resolved, d.exists);
-    }
-
-    // --- Membership Management ---
-    function addMember(address _member) public onlyOwner {
-        require(_member != address(0), "DisputeResolver: Cannot add the zero address");
-        require(!isMember[_member], "DisputeResolver: Address is already a member");
-        isMember[_member] = true;
-        totalMembers++;
-        emit MemberAdded(_member);
-    }
-
-    function removeMember(address _member) public onlyOwner {
-        require(_member != address(0), "DisputeResolver: Cannot remove the zero address");
-        require(isMember[_member], "DisputeResolver: Address is not a member");
-        require(_member != owner(), "DisputeResolver: Cannot remove the owner");
-        isMember[_member] = false;
-        totalMembers--;
-        emit MemberRemoved(_member);
+        return (d.proposer, d.resolved, d.exists);
     }
 }
