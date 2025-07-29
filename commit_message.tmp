@@ -1,5 +1,0 @@
-feat(challenger): implement basic challenger service
-
-This commit introduces the initial implementation of the zk-challenger service. It listens for DataProposed events, applies a basic fraud detection rule, and automatically calls the challengeData function if fraudulent data is detected.
-
-The e2e test script has been updated to launch both the witness and challenger services, demonstrating a full happy/unhappy path loop. All linting and dependency issues discovered during the final quality check have been resolved.

@@ -65,5 +65,35 @@ describe('DisputeResolver', function () {
       expect(dispute.yesVotes).to.equal(1)
       expect(dispute.noVotes).to.equal(0)
     })
+
+    it('Should resolve a dispute when a majority is reached', async function () {
+      const { disputeResolver, owner, member1, otherAccount } = await loadFixture(deployDisputeResolverFixture)
+      const disputeId = keccak256(toUtf8Bytes('proposal-2'))
+
+      // Owner and Member1 vote to confirm fraud
+      await disputeResolver.connect(owner).castVote(disputeId, true)
+      await disputeResolver.connect(member1).castVote(disputeId, true)
+
+      // Anyone can trigger the resolution
+      await expect(disputeResolver.connect(otherAccount).resolveDispute(disputeId))
+        .to.emit(disputeResolver, 'DisputeResolved')
+        .withArgs(disputeId, true) // true = fraud confirmed
+
+      const dispute = await disputeResolver.disputes(disputeId)
+      expect(dispute.resolved).to.be.true
+    })
+
+    it('Should revert when trying to resolve a dispute before majority is reached', async function () {
+      const { disputeResolver, owner, otherAccount } = await loadFixture(deployDisputeResolverFixture)
+      const disputeId = keccak256(toUtf8Bytes('proposal-3'))
+
+      // Only one member votes (not a majority)
+      await disputeResolver.connect(owner).castVote(disputeId, true)
+
+      // Expect the resolution to fail
+      await expect(disputeResolver.connect(otherAccount).resolveDispute(disputeId)).to.be.revertedWith(
+        'DisputeResolver: Majority threshold not reached',
+      )
+    })
   })
 })
