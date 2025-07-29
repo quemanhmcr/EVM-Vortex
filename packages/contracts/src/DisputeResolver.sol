@@ -5,6 +5,16 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/IStakingManager.sol";
 import "./interfaces/IVortexVerifier.sol";
 
+// A generic interface for any ZK Verifier contract
+interface IVerifier {
+    function verifyProof(
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c,
+        uint256[2] calldata input
+    ) external view returns (bool);
+}
+
 contract DisputeResolver is Ownable {
     // --- Structs ---
     struct Dispute {
@@ -18,6 +28,7 @@ contract DisputeResolver is Ownable {
 
     // --- State Variables ---
     address public vortexVerifierAddress;
+    address public zkVerifierAddress;
     IStakingManager public stakingManager;
     mapping(address => bool) public isMember;
     mapping(bytes32 => Dispute) public disputes;
@@ -49,6 +60,10 @@ contract DisputeResolver is Ownable {
         require(_verifier != address(0) && _stakingManager != address(0), "DisputeResolver: Zero address");
         vortexVerifierAddress = _verifier;
         stakingManager = IStakingManager(_stakingManager);
+    }
+
+    function setZkVerifierAddress(address _zkVerifier) external onlyOwner {
+        zkVerifierAddress = _zkVerifier;
     }
 
     function createDispute(bytes32 disputeId, address proposer) external onlyVortexVerifier {
@@ -91,6 +106,31 @@ contract DisputeResolver is Ownable {
             revert("DisputeResolver: Majority threshold not reached");
         }
 
+        _resolve(disputeId, isFraud);
+    }
+
+    function resolveDisputeWithProof(
+        bytes32 disputeId,
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c,
+        uint256[2] calldata input
+    ) public {
+        Dispute storage dispute = disputes[disputeId];
+        require(dispute.exists, "DisputeResolver: Dispute does not exist");
+        require(!dispute.resolved, "DisputeResolver: Dispute has already been resolved");
+        require(zkVerifierAddress != address(0), "DisputeResolver: ZK Verifier not set");
+
+        bool verified = IVerifier(zkVerifierAddress).verifyProof(a, b, c, input);
+        require(verified, "DisputeResolver: Invalid ZK proof");
+
+        // If proof is valid, it means fraud was proven.
+        _resolve(disputeId, true);
+    }
+
+    // --- Internal Functions ---
+    function _resolve(bytes32 disputeId, bool isFraud) internal {
+        Dispute storage dispute = disputes[disputeId];
         dispute.resolved = true;
         emit DisputeResolved(disputeId, isFraud, dispute.proposer);
 
