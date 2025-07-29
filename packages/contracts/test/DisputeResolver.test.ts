@@ -123,13 +123,13 @@ describe('DisputeResolver', function () {
       const { disputeResolver, vortexVerifier, proposer, challenger, owner, stakingManager } =
         await loadFixture(deployFullSystemFixture)
 
-      // 1. Deploy the mock ZK Verifier from the testing folder
-      const MockVerifierFactory = await ethers.getContractFactory('Groth16Verifier')
-      const mockVerifier = await MockVerifierFactory.deploy()
-      await mockVerifier.waitForDeployment()
+      // 1. Deploy the production ZK Verifier
+      const VerifierFactory = await ethers.getContractFactory('VortexGroth16Verifier')
+      const verifier = await VerifierFactory.deploy()
+      await verifier.waitForDeployment()
 
       // 2. Set the verifier address in the DisputeResolver
-      await disputeResolver.connect(owner).setZkVerifierAddress(await mockVerifier.getAddress())
+      await disputeResolver.connect(owner).setZkVerifierAddress(await verifier.getAddress())
 
       // 3. Create a dispute
       const disputeId = await fullChallengeCycle(vortexVerifier, proposer, challenger)
