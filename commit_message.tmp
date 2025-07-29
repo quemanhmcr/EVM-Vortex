@@ -1,5 +1,11 @@
-feat(challenger): implement basic challenger service
+feat(contracts): add placeholder ZK proof verification
 
-This commit introduces the initial implementation of the zk-challenger service. It listens for DataProposed events, applies a basic fraud detection rule, and automatically calls the challengeData function if fraudulent data is detected.
+Replaces the council-based voting mechanism in the DisputeResolver with a more robust, extensible system based on ZK-proof verification.
 
-The e2e test script has been updated to launch both the witness and challenger services, demonstrating a full happy/unhappy path loop. All linting and dependency issues discovered during the final quality check have been resolved.
+This commit, developed via strict TDD, introduces:
+- A new `resolveDisputeWithProof` function to handle ZK-based resolution.
+- An `IVerifier` interface and a placeholder `Groth16Verifier` mock contract for testing.
+- The ability to set a ZK Verifier address on the `DisputeResolver`.
+- Refactoring of the internal `_resolve` function to handle outcomes from both voting (legacy) and ZK proofs.
+
+The existing voting mechanism (`resolveDispute`) is kept for now to ensure a phased rollout, but the foundation is now laid for a full transition to ZK-proofs.

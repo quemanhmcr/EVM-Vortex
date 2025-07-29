@@ -117,4 +117,40 @@ describe('DisputeResolver', function () {
       expect(await stakingManager.stakes(proposer.address)).to.equal(stakeAmount)
     })
   })
+
+  describe('ZK Proof Resolution', function () {
+    it('Should call the ZK Verifier and resolve a dispute based on a valid proof', async function () {
+      const { disputeResolver, vortexVerifier, proposer, challenger, owner, stakingManager } =
+        await loadFixture(deployFullSystemFixture)
+
+      // 1. Deploy the mock ZK Verifier from the testing folder
+      const MockVerifierFactory = await ethers.getContractFactory('Groth16Verifier')
+      const mockVerifier = await MockVerifierFactory.deploy()
+      await mockVerifier.waitForDeployment()
+
+      // 2. Set the verifier address in the DisputeResolver
+      await disputeResolver.connect(owner).setZkVerifierAddress(await mockVerifier.getAddress())
+
+      // 3. Create a dispute
+      const disputeId = await fullChallengeCycle(vortexVerifier, proposer, challenger)
+
+      // 4. Mock the proof and public signals
+      const proof = { a: [0, 0], b: [[0, 0], [0, 0]], c: [0, 0] };
+      const publicSignals = [0, 0];
+
+      // 5. Expect the call to succeed and emit the final resolution event
+      // Since the mock verifier always returns true, this should resolve as fraud.
+      const tx = await disputeResolver
+        .connect(challenger)
+        .resolveDisputeWithProof(disputeId, proof.a, proof.b, proof.c, publicSignals)
+
+      await expect(tx)
+        .to.emit(disputeResolver, 'DisputeResolved')
+        .withArgs(disputeId, true, proposer.address)
+
+      // 6. Verify side-effects (proposer slashed, challenger refunded)
+      expect(await stakingManager.stakes(proposer.address)).to.equal(0)
+      await expect(tx).to.changeEtherBalance(challenger, CHALLENGE_BOND)
+    })
+  })
 })
