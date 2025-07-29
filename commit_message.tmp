@@ -1,8 +1,0 @@
-feat(contracts): implement on-chain dispute mechanism
-
-- Implements the on-chain logic for the "unhappy path" or dispute mechanism.
-- Introduces `DisputeResolver.sol` as the base contract for handling dispute resolution, currently managed by an owner.
-- Updates `VortexVerifier.sol` to include a `challengeData` function, allowing any user to flag a proposal as fraudulent within the challenge period.
-- Adds an `isChallenged` flag to the `Proposal` struct, preventing the execution of disputed data.
-- All new logic is fully tested using a TDD approach, including checks for invalid challenges and correct state transitions.
-- The entire codebase is verified with the project's linting, formatting, and build tools.
