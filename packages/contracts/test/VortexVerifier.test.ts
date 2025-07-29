@@ -41,8 +41,8 @@ describe('VortexVerifier', function () {
     )
     await vortexVerifier.waitForDeployment()
 
-    // Crucial step: Set the VortexVerifier address in DisputeResolver so it can be called back
-    await disputeResolver.connect(owner).setVortexVerifierAddress(await vortexVerifier.getAddress());
+    // Crucial step: Set the addresses in DisputeResolver so it can be called back
+    await disputeResolver.connect(owner).setAddresses(await vortexVerifier.getAddress(), await stakingManager.getAddress());
 
     // Setup: 'proposer' stakes 1 ETH to be eligible
     const stakeAmount = ethers.parseEther('1')
@@ -134,8 +134,9 @@ describe('VortexVerifier', function () {
 
       // Assert: Check if the dispute was initialized in DisputeResolver
       const dispute = await disputeResolver.getDispute(dataId)
-      const [yesVotes, noVotes, resolved, exists] = dispute
+      const [proposer, yesVotes, noVotes, resolved, exists] = dispute
 
+      expect(proposer).to.equal(fixture.proposer.address)
       expect(yesVotes).to.equal(0)
       expect(noVotes).to.equal(0)
       expect(resolved).to.be.false

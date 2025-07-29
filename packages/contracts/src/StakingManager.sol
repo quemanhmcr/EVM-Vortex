@@ -11,6 +11,9 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
  * @dev Inherits from ReentrancyGuard to prevent re-entrancy attacks on the unstake function.
  */
 contract StakingManager is ReentrancyGuard {
+    address public owner;
+    address public disputeResolverAddress;
+
     /**
      * @notice Mapping from a user's address to their staked amount in wei.
      */
@@ -29,6 +32,27 @@ contract StakingManager is ReentrancyGuard {
      * @param amount The amount unstaked in wei.
      */
     event Unstaked(address indexed user, uint256 amount);
+
+    event Slashed(address indexed user, uint256 amount);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "StakingManager: Caller is not the owner");
+        _;
+    }
+
+    modifier onlyDisputeResolver() {
+        require(msg.sender == disputeResolverAddress, "StakingManager: Caller is not the DisputeResolver");
+        _;
+    }
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    function setDisputeResolverAddress(address _address) external onlyOwner {
+        require(_address != address(0), "StakingManager: Zero address not allowed");
+        disputeResolverAddress = _address;
+    }
 
     /**
      * @notice Allows a user to stake ETH by sending it to this function.
@@ -59,5 +83,19 @@ contract StakingManager is ReentrancyGuard {
         // Interaction
         (bool success, ) = msg.sender.call{value: amount}("");
         require(success, "StakingManager: ETH transfer failed");
+    }
+
+    /**
+     * @notice Slashes the entire stake of a proposer.
+     * @dev Can only be called by the registered DisputeResolver contract.
+     * The slashed funds are kept in this contract.
+     * @param _proposer The address of the proposer to be slashed.
+     */
+    function slash(address _proposer) external onlyDisputeResolver {
+        uint256 stakeToSlash = stakes[_proposer];
+        require(stakeToSlash > 0, "StakingManager: No stake to slash");
+        
+        stakes[_proposer] = 0;
+        emit Slashed(_proposer, stakeToSlash);
     }
 }
